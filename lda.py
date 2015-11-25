@@ -13,8 +13,9 @@ def polygamma_f(n, x):
 def lda_em(corpus, k, alpha0=None, beta0=None):
     documents, V = corpus[0], corpus[1]
     # initialize gammas, phis
-    gamma = [None] * len(documents)
-    phi = [None] * len(documents)
+    gamma, phi = [None] * len(documents), [None] * len(documents)
+    ets, ezts = [None] * len(documents), [None] * len(documents)
+    etgs, ezps = [None] * len(documents), [None] * len(documents)
     alpha, beta = alpha0, beta0
     alpha = np.random.rand(k) if alpha0 is None else alpha0
     beta = np.random.rand(k, V) if beta0 is None else beta0
@@ -23,12 +24,13 @@ def lda_em(corpus, k, alpha0=None, beta0=None):
     while prev_bound is None or np.abs(bound - prev_bound) < threshold:
         for doc_idx in range(len(documents)):
             document = documents[doc_idx]
-            best_phi, best_gamma = e_step(document, k, alpha, beta)
+            best_phi, best_gamma, et, ezt, etg, ezp = e_step(document, k, alpha, beta)
             gamma[doc_idx], phi[doc_idx] = best_phi, best_gamma
+            ets[doc_idx], ezts[doc_idx], etgs[doc_idx], ezps[doc_idx] = eta, ezt, etg, ezp
 
         prev_bound = bound
-        alpha, beta = m_step(documents, gamma, phi)
-        bound = ll_bound(corpus, phi, gamma, alpha, beta)
+        alpha, beta, eta, ewzb = m_step(documents, gamma, phi, alpha, ets)
+        bound = (len(documents) * (eta + ewzb)) + sum(ezts) - sum(etgs) - sum(ezps)
 
     return alpha, beta
 
@@ -43,30 +45,33 @@ def ll_bound(corpus, phi, gamma, alpha, beta):
         bound += ll_bound_doc(document, doc_phi, doc_gamma, alpha, beta)
     return bound
 
-def ll_bound_doc(document, phi, gamma, alpha, beta):
+def ll_bound_doc(document, phi, gamma, alpha, beta, save=False):
     # partition bound part 1 (E_q(log p(theta|alpha)))
-    e_theta = digamma_f(doc_gamma) - digamma_f(np.sum(doc_gamma))
+    e_theta = digamma_f(gamma) - digamma_f(np.sum(gamma))
     p1_1 = np.sum(np.multiply((alpha - 1), e_theta))
     p1_2 = np.log(gamma_f(np.sum(alpha))) - np.sum(np.log(gamma_f(alpha)))
     p1 = p1_1 + p1_2
 
     # partition bound part 2 (E_q(log p(z|theta)))
-    p2 = np.sum(np.dot(doc_phi, e_theta))
+    p2 = np.sum(np.dot(phi, e_theta))
 
     # partition bound part 3 (E_q(log p(w|z, beta)))
-    p3 = np.sum(np.multiply(doc_phi, np.dot(document, (np.log(beta).T))))
+    p3 = np.sum(np.multiply(phi, np.dot(document, (np.log(beta).T))))
 
     # partition bound part 4 (E_q(log q(theta|gamma)))
-    p4_1 = np.log(gamma_f(np.sum(doc_gamma))) - np.sum(np.log(gamma_f(doc_gamma)))
-    p4_2 = np.sum(np.multiply(doc_gamma - 1, e_theta))
+    p4_1 = np.log(gamma_f(np.sum(gamma))) - np.sum(np.log(gamma_f(gamma)))
+    p4_2 = np.sum(np.multiply(gamma - 1, e_theta))
     p4 = p4_1 + p4_2
 
     # partition bound part 5 (E_q(log q(z|phi)))
-    p5 = np.sum(np.multiply(doc_phi, np.log(doc_phi)))
+    p5 = np.sum(np.multiply(phi, np.log(phi)))
 
     # full partition bound from parts
     bound = (p1 + p2 + p3 - p4 - p5)
-    return bound
+    if not save:
+        return bound
+    else:
+        return bound, e_theta, p2, p4, p5
 
 def e_step(document, k, alpha, beta):
     word_idx = np.where(document == 1)[1]
@@ -86,30 +91,31 @@ def e_step(document, k, alpha, beta):
         phi = np.multiply((beta[:, word_idx]).T, digamma_f(prev_gamma))
         phi = (phi.T / np.sum(phi, axis=1)).T
         gamma = alpha + np.sum(phi, axis=0)
-    return phi, gamma
+    bound, et, ezt, etg, ezp = ll_bound_doc(document, phi, gamma, alpha, beta, True)
+    return phi, gamma, et, ezt, etg, ezp
 
-def m_step(documents, gamma, phi):
+def m_step(documents, gamma, phi, prev_alpha, ets):
     pre_beta = [np.dot(phi[i].T, documents[i]) for i in range(len(documents))]
     beta = sum(pre_beta)
 
     M = len(documents)
-    alpha = newton(bound_alpha, prev_alpha, alpha_grad, alpha_hess)
+    def bound_alpha_lc(alpha):
+        return bound_alpha(alpha, ets)
+    def bound_alpha_grad_lc(alpha):
+        return bound_alpha_grad(M, alpha, ets)
+    alpha = newton(bound_alpha_lc, prev_alpha, bound_alpha_grad_lc, bound_alpha_hess)
 
     return alpha, beta
 
-def bound_alpha(gamma, alpha):
+def bound_alpha(alpha, digamma_diffs):
     p1 = np.log(gamma_f(np.sum(alpha))) - np.sum(np.log(np.sum(gamma_f(alpha))))
-    gamma_sums = [np.sum(doc_gamma) for doc_gamma in gamma]
-    def bound_doc(idx):
-        doc_gamma, doc_gamma_sum, doc_phi, = gamma[idx], gamma_sums[idx], phi[idx]
-        return np.sum(np.multiply(alpha - 1, digamma_f(doc_gamma) - digamma(doc_gamma_sum)))
-    doc_bounds = [bound_doc[idx] for idx in range(len(gamma))]
-    return (M*p1 + sum(doc_bounds))
+    use_alpha = alpha - 1
+    doc_parts = [np.sum(np.multiply(use_alpha, digamma_diff)) for digamma_diff in digamma_diffs]
+    return (M*p1 + sum(doc_parts))
 
-def bound_alpha_grad(gamma, alpha):
-    gamma_sums = [np.sum(doc_gamma) for doc_gamma in gamma]
+def bound_alpha_grad(M, alpha, digamma_diffs):
     p1 = M * (digamma_f(np.sum(alpha)) - digamma_f(alpha))
-    p2 = sum([digamma_f(gamma[idx]) - digamma_f(gamma_sums[idx]) for idx in range(len(gamma))])
+    p2 = sum(digamma_diffs)
     grad = p1 + p2
     return grad
 

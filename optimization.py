@@ -1,6 +1,6 @@
 import numpy as np
 
-def newton(func, init, grad='approx', hess='approx', step='bls'):
+def newton(init, func, grad='approx', hess='approx', step='bls'):
     def bls(curr, change, alpha=0.25, beta=0.5):
         t, guess = 1, None
         while (guess is None or guess >= bound):

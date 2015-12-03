@@ -1,20 +1,21 @@
 import numpy as np
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
+import data_mgmt as dmg
 import os
 
 def train_test_models(data_dir, target_dir, ntopics=[5, 10, 20, 50, 100]):
     corpora = os.listdir(data_dir)
     for corpus_file in corpora:
-        corpus = load_corpus(data_dir + "/" + corpus_file)
+        corpus = dmg.load_corpus(data_dir + "/" + corpus_file)
         for num_topics in ntopics:
             um_model = UnigramMixture(num_topics)
             um_model.train(corpus)
-            save_model_params(um_model.get_params(), target_dir + "/" + corpus_file[:-4] + ".mat")
+            dmg.save_model_params(um_model.get_params(), target_dir + "/" + corpus_file[:-4] + ".mat")
 
             lda_model = LDAModel(num_topics)
             lda_model.train(corpus)
-            save_model_params(lda_model.get_params(), target_dir + "/" + corpus_file[:-4] + ".mat")
+            dmg.save_model_params(lda_model.get_params(), target_dir + "/" + corpus_file[:-4] + ".mat")
 
 def perplexity(model, corpus):
     return model.test(corpus)
@@ -32,7 +33,7 @@ def test_perplexity_vs_ntopics(corpus, model_dir):
         model_fullname = model_full_files[i]
         model_split = model_fname.split('_')
         mtype, mcorp, mk = model_split[0], model_split[1], model_split[2][:-4]
-        params = load_model_params(model_fullname)
+        params = dmg.load_model_params(model_fullname)
         # TODO: perhaps clean by allowing model to be instantiated from params
 
         if mtype == 'um':
@@ -77,7 +78,7 @@ def test_best_topic_words(model_dir, result_dir, num_words=10):
     model_files = [model_dir + "/" + model_file for model_file in model_files]
     for model_file in model_files:
         last_part = model_file.split["/"][-1]
-        params = load_model_params(model_file)
+        params = dmg.load_model_params(model_file)
         word_gens, vocab = params["beta"], params["vocab"]
         vocab_size = word_gens.shape[0]
         best_words = np.argpartition(word_gens, vocab_size - num_words, axis=1)
@@ -94,7 +95,7 @@ def test_word_feature_reps(model_dir, num_words=500):
     model_files = [model_dir + "/" + model_file for model_file in model_files]
     for model_file in model_files:
         last_part = model_file.split["/"][-1]
-        params = load_model_params(model_file)
+        params = dmg.load_model_params(model_file)
         word_gens, vocab = params["beta"], params["vocab"]
         rand_idx = np.random.choice(word_gens.shape[0], num_words)
         rand_words = word_gens[rand_idx, :]

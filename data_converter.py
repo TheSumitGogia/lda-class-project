@@ -2,6 +2,7 @@ import scipy.io as sio
 from scipy.sparse import csr_matrix
 import numpy as np
 from stop_words import get_stop_words
+from random import shuffle
 import os
 import string
 
@@ -26,21 +27,10 @@ def tokenize(lines):
     tokens = [token for token in tokens if token not in stwords]
     return tokens
 
-def sn_convert():
-    print "Starting conversion of Sparknotes dataset..."
-    bookdir = "sn/books"
-    bookdirs = os.listdir(bookdir)
-    words, word_ct = {}, 0
-    all_docs = []
-    for book in bookdirs:
-        bookfiles = os.listdir(bookdir + "/" + book)
-        bookfiles = [f for f in bookfiles if f.startswith("section")]
-        bookfiles = [bookdir + "/" + book + "/" + doc for doc in bookfiles]
-        all_docs.extend(bookfiles)
-    print "Found all documents, number: {0}".format(len(all_docs))
-
+def get_sn_vocab(docs):
     print "Determining vocabulary..."
-    for doc in all_docs:
+    words, word_ct = {}, 0
+    for doc in docs:
         fulldoc = doc
         docfile = open(fulldoc, 'r')
         doclines = docfile.readlines()
@@ -51,11 +41,12 @@ def sn_convert():
                 word_ct += 1
         docfile.close()
     print "Determined vocabulary of size {0}".format(word_ct)
+    return words, word_ct
 
-    corpus_dict = {"V": word_ct, "M": len(all_docs)}
+def get_sn_mats(docs, words, word_ct, corpus_dict):
     print "Computing data matrices for documents"
-    for doc_idx in range(len(all_docs)):
-        fulldoc = all_docs[doc_idx]
+    for doc_idx in range(len(docs)):
+        fulldoc = docs[doc_idx]
         docfile = open(fulldoc, 'r')
         doclines = docfile.readlines()
         doctokens = tokenize(doclines)
@@ -70,40 +61,55 @@ def sn_convert():
         corpus_dict[str(doc_idx) + "_docmat"] = docmat
         corpus_dict[str(doc_idx) + "_index"] = index
         corpus_dict[str(doc_idx) + "_freq"] = freq
+
+def sn_convert():
+
+    print "Starting conversion of Sparknotes dataset..."
+    bookdir = "sn/books"
+    bookdirs = os.listdir(bookdir)
+    all_docs = []
+    for book in bookdirs:
+        bookfiles = os.listdir(bookdir + "/" + book)
+        bookfiles = [f for f in bookfiles if f.startswith("section")]
+        bookfiles = [bookdir + "/" + book + "/" + doc for doc in bookfiles]
+        all_docs.extend(bookfiles)
+    print "Found all documents, number: {0}".format(len(all_docs))
+
+    # test/train data
+    shuffle(all_docs)
+    split = int(len(all_docs) * 0.9)
+    train, test = all_docs[:split], all_docs[split:]
+
+    tr_words, tr_wc = get_sn_vocab(train)
+    tt_words, tt_wc = get_sn_vocab(test)
+
+    tr_corpus_dict = {"V": tr_wc, "M": len(train)}
+    tt_corpus_dict = {"V": tt_wc, "M": len(test)}
+
+    get_sn_mats(train, tr_words, tr_wc, tr_corpus_dict)
+    get_sn_mats(test, tt_words, tt_wc, tt_corpus_dict)
+
     print "Writing document matrices to file..."
-    sio.savemat("data/sn_data", corpus_dict)
+    sio.savemat("data/sn_train", tr_corpus_dict)
+    sio.savemat("data/sn_test", tt_corpus_dict)
     print "Completed data write"
 
-def ap_convert():
-    print "Starting conversion of AP dataset..."
-    docfile = open('ap/ap.txt', 'r')
-    doclines = docfile.readlines()
-    doclines = [line.strip() for line in doclines]
-    doc_texts = []
-    curr_lines, current = [], False
-    words, word_ct = {}, 0
-    print "Searching for documents..."
+def get_ap_vocab(docs):
+    # NOTE: side effect, tokenizes docs
     print "Determining vocabulary..."
-    for line in doclines:
-        if line == "<TEXT>":
-            current = True
-        elif line == "</TEXT>" and current:
-            tokens = tokenize(curr_lines)
-            for token in tokens:
-                if token not in words:
-                    words[token] = word_ct
-                    word_ct += 1
-            current = False
-            doc_texts.append(tokens)
-            curr_lines = []
-        elif current:
-            curr_lines.append(line)
-    docfile.close()
-    print "Found all documents, number: {0}".format(len(doc_texts))
+    words, word_ct = {}, 0
+    for i in range(len(docs)):
+        tokens = tokenize(docs[i])
+        for token in tokens:
+            if token not in words:
+                words[token] = word_ct
+                word_ct += 1
+        docs[i] = tokens
     print "Determined vocabulary of size: {0}".format(word_ct)
+    return words, word_ct
 
+def get_ap_mats(doc_texts, words, word_ct, corpus_dict):
     print "Computing data matrices for documents"
-    corpus_dict = {"V": word_ct, "M": len(doc_texts)}
     for doc_idx in range(len(doc_texts)):
         doctokens = doc_texts[doc_idx]
         data = [1] * len(doctokens)
@@ -116,8 +122,45 @@ def ap_convert():
         corpus_dict[str(doc_idx) + "_docmat"] = docmat
         corpus_dict[str(doc_idx) + "_index"] = index
         corpus_dict[str(doc_idx) + "_freq"] = freq
+
+def ap_convert():
+    print "Starting conversion of AP dataset..."
+    docfile = open('ap/ap.txt', 'r')
+    doclines = docfile.readlines()
+    doclines = [line.strip() for line in doclines]
+    doc_texts = []
+    curr_lines, current = [], False
+    words, word_ct = {}, 0
+
+    print "Searching for documents..."
+    for line in doclines:
+        if line == "<TEXT>":
+            current = True
+        elif line == "</TEXT>" and current:
+            current = False
+            doc_texts.append(curr_lines)
+            curr_lines = []
+        elif current:
+            curr_lines.append(line)
+    docfile.close()
+    print "Found all documents, number: {0}".format(len(doc_texts))
+
+    shuffle(doc_texts)
+    split = int(len(doc_texts) * 0.9)
+    train, test = doc_texts[:split], doc_texts[split:]
+
+    tr_words, tr_wc = get_ap_vocab(train)
+    tt_words, tt_wc = get_ap_vocab(test)
+
+    tr_corpus_dict = {"V": tr_wc, "M": len(train)}
+    tt_corpus_dict = {"V": tt_wc, "M": len(test)}
+
+    get_ap_mats(train, tr_words, tr_wc, tr_corpus_dict)
+    get_ap_mats(test, tt_words, tt_wc, tt_corpus_dict)
+
     print "Writing document matrices to file..."
-    sio.savemat("data/ap_data", corpus_dict)
+    sio.savemat("data/ap_train", tr_corpus_dict)
+    sio.savemat("data/ap_test", tt_corpus_dict)
     print "Completed data write"
 
 if __name__ == '__main__':

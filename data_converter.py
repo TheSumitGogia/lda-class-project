@@ -1,5 +1,5 @@
 import scipy.io as sio
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, csc_matrix
 import numpy as np
 from stop_words import get_stop_words
 from random import shuffle
@@ -22,9 +22,11 @@ stwords = set(stwords)
 
 def tokenize(lines):
     lines = [strip_punc(line, 's') for line in lines]
+    lines = [line for line in lines if line != "" and line != " " and line != "\n"]
     lines = [line.split() for line in lines]
     tokens = [token.lower() for lsplit in lines for token in lsplit]
     tokens = [token for token in tokens if token not in stwords]
+
     return tokens
 
 def get_sn_vocab(docs):
@@ -34,6 +36,9 @@ def get_sn_vocab(docs):
         fulldoc = doc
         docfile = open(fulldoc, 'r')
         doclines = docfile.readlines()
+        # hack to get around empty documents
+        if len(doclines) < 1:
+            print fulldoc
         doctokens = tokenize(doclines)
         for token in doctokens:
             if token not in words:
@@ -56,7 +61,7 @@ def get_sn_mats(docs, words, word_ct, corpus_dict):
         cols = [words[token] for token in doctokens]
         docmat = csr_matrix((data, (rows, cols)), shape=(len(doctokens), word_ct))
         index = np.array(cols)
-        freq = docmat.sum(axis=0)
+        freq = csc_matrix((docmat.sum(axis=0)).reshape(word_ct, 1))
 
         corpus_dict[str(doc_idx) + "_docmat"] = docmat
         corpus_dict[str(doc_idx) + "_index"] = index
@@ -138,6 +143,10 @@ def ap_convert():
             current = True
         elif line == "</TEXT>" and current:
             current = False
+            # NOTE: hack to ensure no empty documents
+            if curr_lines[0] == '':
+                curr_lines = []
+                continue
             doc_texts.append(curr_lines)
             curr_lines = []
         elif current:

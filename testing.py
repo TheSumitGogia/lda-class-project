@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.manifold import TSNE
+from modeling import *
 import matplotlib.pyplot as plt
 import data_mgmt as dmg
 import os
@@ -7,15 +8,22 @@ import os
 def train_test_models(data_dir, target_dir, ntopics=[5, 10, 20, 50, 100]):
     corpora = os.listdir(data_dir)
     for corpus_file in corpora:
+        # avoid training models on test corpora
+        spl = corpus_file.split('_')
+        if spl[-1] == 'test': continue
+
+        # load corpus and train models for all topic counts
         corpus = dmg.load_corpus(data_dir + "/" + corpus_file)
         for num_topics in ntopics:
-            um_model = UnigramMixture(num_topics)
-            um_model.train(corpus)
-            dmg.save_model_params(um_model.get_params(), target_dir + "/" + corpus_file[:-4] + ".mat")
-
+            plsi_model = PLSIModel(num_topics)
+            plsi_model.train(corpus)
+            dmg.save_model_params(plsi_model.get_params(), target_dir + "/" + corpus_file[:-4] + ".mat")
+        '''
+        for num_topics in ntopics:
             lda_model = LDAModel(num_topics)
             lda_model.train(corpus)
             dmg.save_model_params(lda_model.get_params(), target_dir + "/" + corpus_file[:-4] + ".mat")
+        '''
 
 def perplexity(model, corpus):
     return model.test(corpus)

@@ -61,7 +61,7 @@ def get_sn_mats(docs, words, word_ct, corpus_dict):
         cols = [words[token] for token in doctokens]
         docmat = csr_matrix((data, (rows, cols)), shape=(len(doctokens), word_ct))
         index = np.array(cols)
-        freq = csc_matrix((docmat.sum(axis=0)).reshape(word_ct, 1))
+        freq = csr_matrix((docmat.sum(axis=0)))
 
         corpus_dict[str(doc_idx) + "_docmat"] = docmat
         corpus_dict[str(doc_idx) + "_index"] = index
@@ -122,7 +122,7 @@ def get_ap_mats(doc_texts, words, word_ct, corpus_dict):
         cols = [words[token] for token in doctokens]
         docmat = csr_matrix((data, (rows, cols)), shape=(len(doctokens), word_ct))
         index = np.array(cols)
-        freq = docmat.sum(axis=0)
+        freq = csr_matrix(docmat.sum(axis=0))
 
         corpus_dict[str(doc_idx) + "_docmat"] = docmat
         corpus_dict[str(doc_idx) + "_index"] = index

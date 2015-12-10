@@ -49,7 +49,7 @@ def get_sn_vocab(docs):
     return words, word_ct
 
 def get_sn_mats(docs, words, word_ct, corpus_dict):
-    print "Computing data matrices for documents"
+    print "Computing data matrices for documents, {0}".format(len(docs))
     for doc_idx in range(len(docs)):
         fulldoc = docs[doc_idx]
         docfile = open(fulldoc, 'r')
@@ -63,9 +63,9 @@ def get_sn_mats(docs, words, word_ct, corpus_dict):
         index = np.array(cols)
         freq = csr_matrix((docmat.sum(axis=0)))
 
-        corpus_dict[str(doc_idx) + "_docmat"] = docmat
+        corpus_dict[str(doc_idx) + "_docmat"] = docmat.asfptype()
         corpus_dict[str(doc_idx) + "_index"] = index
-        corpus_dict[str(doc_idx) + "_freq"] = freq
+        corpus_dict[str(doc_idx) + "_freq"] = freq.asfptype()
 
 def sn_convert():
 
@@ -82,11 +82,13 @@ def sn_convert():
 
     # test/train data
     shuffle(all_docs)
+    all_docs = all_docs[:445]
     split = int(len(all_docs) * 0.9)
     train, test = all_docs[:split], all_docs[split:]
 
     tr_words, tr_wc = get_sn_vocab(train)
     tt_words, tt_wc = get_sn_vocab(test)
+    check_words = tt_words.values()
 
     tr_corpus_dict = {"V": tr_wc, "M": len(train)}
     tt_corpus_dict = {"V": tt_wc, "M": len(test)}
@@ -97,6 +99,12 @@ def sn_convert():
     print "Writing document matrices to file..."
     sio.savemat("data/sn_train", tr_corpus_dict)
     sio.savemat("data/sn_test", tt_corpus_dict)
+    vocab = open("vocab/sn_train.txt", 'w')
+    vocab.write(str(tr_words))
+    vocab.close()
+    vocab = open("vocab/sn_test.txt", 'w')
+    vocab.write(str(tt_words))
+    vocab.close()
     print "Completed data write"
 
 def get_ap_vocab(docs):
@@ -114,7 +122,7 @@ def get_ap_vocab(docs):
     return words, word_ct
 
 def get_ap_mats(doc_texts, words, word_ct, corpus_dict):
-    print "Computing data matrices for documents"
+    print "Computing data matrices for documents, {0}".format(len(doc_texts))
     for doc_idx in range(len(doc_texts)):
         doctokens = doc_texts[doc_idx]
         data = [1] * len(doctokens)
@@ -124,9 +132,9 @@ def get_ap_mats(doc_texts, words, word_ct, corpus_dict):
         index = np.array(cols)
         freq = csr_matrix(docmat.sum(axis=0))
 
-        corpus_dict[str(doc_idx) + "_docmat"] = docmat
+        corpus_dict[str(doc_idx) + "_docmat"] = docmat.asfptype()
         corpus_dict[str(doc_idx) + "_index"] = index
-        corpus_dict[str(doc_idx) + "_freq"] = freq
+        corpus_dict[str(doc_idx) + "_freq"] = freq.asfptype()
 
 def ap_convert():
     print "Starting conversion of AP dataset..."
@@ -155,6 +163,7 @@ def ap_convert():
     print "Found all documents, number: {0}".format(len(doc_texts))
 
     shuffle(doc_texts)
+    doc_texts = doc_texts[:445]
     split = int(len(doc_texts) * 0.9)
     train, test = doc_texts[:split], doc_texts[split:]
 
@@ -170,6 +179,12 @@ def ap_convert():
     print "Writing document matrices to file..."
     sio.savemat("data/ap_train", tr_corpus_dict)
     sio.savemat("data/ap_test", tt_corpus_dict)
+    vocab = open("vocab/ap_train.txt", 'w')
+    vocab.write(str(tr_words))
+    vocab.close()
+    vocab = open("vocab/ap_test.txt", 'w')
+    vocab.write(str(tt_words))
+    vocab.close()
     print "Completed data write"
 
 if __name__ == '__main__':
